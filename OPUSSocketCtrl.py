@@ -1,6 +1,7 @@
 import time
 import socket
 
+import PyTango
 from sardana import State, DataAccess
 from sardana.pool.controller import CounterTimerController
 from sardana.pool.controller import Type, Access, Description, DefaultValue
@@ -10,17 +11,33 @@ class OPUSSocketCtrl(CounterTimerController):
     MaxDevice = 1
 
     ctrl_properties = {
-        "ip": {Type: str,
-               Description: 'IP where the OPUS server is run',
-               DefaultValue: "bl01bruker"
+        "ds": {Type: str,
+               Description: 'Opus Ds URI',
+               DefaultValue: "bl01/ct/opus"
                },
     }
 
     axis_attributes = {
-        "opus_macro_name": {Type: str,
-                            Description: 'OPUS macro',
-                            Access: DataAccess.ReadWrite
-                            },
+        "opus_cmd": {Type: str,
+                    Description: 'OPUS MeasureSample cmd',
+                    Access: DataAccess.ReadOnly
+                    },
+        "opus_exp": {Type: str,
+                     Description: 'OPUS experiment',
+                     Access: DataAccess.ReadWrite
+                     },
+        "opus_xpp": {Type: str,
+                     Description: 'OPUS experiment path',
+                     Access: DataAccess.ReadWrite
+                     },
+        "opus_nam": {Type: str,
+                     Description: 'OPUS filename',
+                     Access: DataAccess.ReadWrite
+                     },
+        "opus_pth": {Type: str,
+                     Description: 'OPUS measurement path',
+                     Access: DataAccess.ReadWrite
+                     },
         "read_peak": {Type: bool,
                       Description: 'Read the scan PKA',
                       Access: DataAccess.ReadWrite
@@ -32,131 +49,105 @@ class OPUSSocketCtrl(CounterTimerController):
 
     def __init__(self, inst, props, *args, **kwargs):
         CounterTimerController.__init__(self, inst, props, *args, **kwargs)
-        # id of the current macro
-        self._macro_id = None
-        self.server_address = (self.ip, 5000)
-        # Connect socket
-        self.sock = None
-        self._state = State.On
-        # self._connectSocket()
-
-    def _connectSocket(self):
-        if self.sock is None:
-            # create socket
-            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.sock.settimeout(10)
+        self._opus_macro_is_running = False
+        # Create DS proxy
         try:
-            self.sock.connect(self.server_address)
-            self.isConnected = True
+            self._opusds = PyTango.DeviceProxy(self.ds)
             self._state = State.On
-        except:
-            self.isConnected = False
+        except PyTango.DevFailed:
+            self._opusds = None
             self._state = State.Fault
-            self._log.debug("There is any problem to connect with the server")
 
-    def _reconnectSocket(self):
-        if self.sock is not None:
-            self.sock.close()
-            self.sock = None
-        self._connectSocket()
-
-    def _runOPUScmd(self, cmd):
-        self.sock.sendall(cmd + '\n')
-        ans = self.sock.recv(4096)
-        return ans
+        self._opus_pth = ""
+        self._opus_nam = ""
+        sefl._opus_cmd = "COMMAND_LINE MeasureSample ..."
+        self._opus_exp = None
+        self._opus_xpp = None
 
     def ReadOne(self, ind):
         self._log.debug("ReadOne... {0}, {1}".format(self._read_peak,
                                                      self._state == State.On))
         value = None
-        if self._read_peak and self._state == State.On:
+        if self._read_peak and self._opusds.state() is PyTango.DevState.ON:
             try:
-                output = self._runOPUScmd("READ_PKA")
-                self._log.debug("ReadOne 1... {0}".format(output))
+                output = self._opusds.getLastOpusOutput()
                 value = float(output)
-                self._log.debug("ReadOne 2... {0}, {1}".format(output, value))
             except:
                 self._log.debug("Exception:", exc_info=True)
         return value
 
     def StateOne(self, ind):
         self._log.debug("StateOne...")
-        status = "On"
-        if self._state == State.Moving and self._macro_id is not None:
-            status = "Acquiring"
-            cmd = "MACRO_RESULTS {0}".format(self._macro_id)
-            ans = self._runOPUScmd(cmd)
-            self._log.debug("StateOne: ans = {0}".format(ans))
-            if 'OK' in ans.upper():
-                state = int(ans.split('\n')[1])
-                if state == self.ON:
-                    self._state = State.On
-                    status = "On"
-                elif state == self.MOVING:
-                    self._state = State.Moving
-                    status = "Moving"
-                else:
-                    self._state = State.Fault
-                    status = "??"
-                    # else: # invalid macro id (macro has finished?)
-                    #    self._state = State.Fault
-                    #    status = "Error reading macro status"
-        elif self._state == State.Fault:
-            status = 'Can not connect with the server'
-        self._log.debug("StateOne... {0}, {1}".format(self._state, status))
-        return self._state, status
+        state = self._opusds.state()
+        if state is PyTango.DevState.ON:
+            if self._opus_macro_is_running and self._read_peak:
+                # Read PKA if macro has finished
+                self._opusds.runOpusCMD("READ_PKA")
+                state = State.Moving
+            else:
+                state = State.On
+            self._opus_macro_is_running = False
+        elif state is PyTango.DevState.RUNNING:
+            state = State.Moving
+        elif state is PyTango.DevState.ALARM:
+            state = State.Fault
+        status = self._opusds.status()
+        self._log.debug("StateOne... {0}, {1}".format(state, status))
+        return state, status
 
     def StartAll(self):
         self._log.debug("StartAll")
 
     def PreStartOne(self, axis, value=None):
-        # try:
-        #    # Evaluate the connection
-        #    self._runOPUScmd('s_pipe')
-        # except:
-        #    # Try to reconnect the socket
-        self._reconnectSocket()
-        # self._runOPUScmd("UNLOAD_SELECTED_FILE")
-        return self.isConnected
+        # self._log.debug('PreStartOne axis %s' % axis)
+        self._opus_cmd = "COMMAND_LINE MeasureSample (0, {{EXP='{0}', XPP='{1}'"
+        if self._opus_nam != '':
+            self._opus_cmd += ", NAM='{0}'".format(self._opus_nam)
+        if self._opus_pth != '':
+            self._opus_cmd += ", PTH='{0}'".format(self._opus_pth)
+        self._opus_cmd += "}});"
+        self._opus_cmd = self._opus_cmd.format(self._opus_exp, self._opus_xpp)
+
+        return self._opusds.connectSocket()
 
     def StartOne(self, axis, value=None):
         self._log.debug("StartOne")
-        if self.isConnected:
-            cmd = "RUN_MACRO {0}".format(self._opus_macro_name)
-            ans = self._runOPUScmd(cmd)
-            if "OK" in ans.upper():
-                self._macro_id = ans.split('\n')[1]
-                self._state = State.Moving
-            else:
-                self._state = State.Fault
-                self._macro_id = None
-        else:
-            self._state = State.Fault
-        self._log.debug(
-            "StartOne end state={0} {1}".format(self._state, self._macro_id))
+        self._opus_macro_is_running = True
+        self._opusds.runOpusCMD(self._opus_cmd)
 
     def LoadOne(self, ind, value):
         pass
 
     def AbortOne(self, ind):
-        if self._macro_id and self._state == State.Running:
-            cmd = "KILL_MACRO {0}".format(self._macro_id)
-            self._runOPUScmd(cmd)
-        self._macro_id = None
-        self._state = State.On
+        self._opusds.stopOpusMacro()
 
     def GetAxisExtraPar(self, axis, name):
-        if name.lower() == "ip":
-            return self._ip
-        elif name.lower() == "opus_macro_name":
-            return self._opus_macro_name
+        if name.lower() == "ds":
+            return self._ds
+        elif name.lower() == "opus_cmd":
+            return self._opus_cmd
         elif name.lower() == "read_peak":
             return self._read_peak
+        elif name.lower() == "opus_xpp":
+            return self._opus_xpp
+        elif name.lower() == "opus_exp":
+            return self._opus_exp
+        elif name.lower() == "opus_pth":
+            return self._opus_pth
+        elif name.lower() == "opus_nam":
+            return self._opus_nam
 
     def SetAxisExtraPar(self, axis, name, value):
-        if name.lower() == "ip":
-            self._ip = value
-        elif name.lower() == "opus_macro_name":
-            self._opus_macro_name = value
+        if name.lower() == "ds":
+            self._ds = value
         elif name.lower() == "read_peak":
             self._read_peak = value
+        elif name.lower() == "opus_xpp":
+            self._opus_xpp = value
+        elif name.lower() == "opus_exp":
+            self._opus_exp = value
+        elif name.lower() == "opus_pth":
+            self._opus_pth = value
+        elif name.lower() == "opus_nam":
+            self._opus_nam = value
+

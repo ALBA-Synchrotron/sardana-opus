@@ -42,6 +42,10 @@ class OPUSSocketCtrl(CounterTimerController):
                       Description: 'Read the scan PKA',
                       Access: DataAccess.ReadWrite
                       },
+        "add_temp2filename": {Type: bool,
+                      Description: 'Add linkam temp to filename',
+                      Access: DataAccess.ReadWrite
+                      },
     }
 
     ON = 1
@@ -60,9 +64,15 @@ class OPUSSocketCtrl(CounterTimerController):
 
         self._opus_pth = ""
         self._opus_nam = ""
-        sefl._opus_cmd = "COMMAND_LINE MeasureSample ..."
+        self._opus_cmd = "COMMAND_LINE MeasureSample"
         self._opus_exp = None
         self._opus_xpp = None
+        self._add_temp2filename = False
+        
+        try:
+            self.linkam = PyTango.DeviceProxy('bl01/ct/linkam')
+        except:
+            self.linkam = None
 
     def ReadOne(self, ind):
         self._log.debug("ReadOne... {0}, {1}".format(self._read_peak,
@@ -102,13 +112,18 @@ class OPUSSocketCtrl(CounterTimerController):
         # self._log.debug('PreStartOne axis %s' % axis)
         self._opus_cmd = "COMMAND_LINE MeasureSample (0, {{EXP='{0}', XPP='{1}'"
         if self._opus_nam != '':
-            self._opus_cmd += ", NAM='{0}'".format(self._opus_nam)
+            temp_name = ''
+            if self._add_temp2filename and self.linkam:
+                temp_name = "_Temp{:+07.2f}".format(self.linkam.read_attribute("temperature").value).replace('.','_')
+            self._opus_cmd += ", NAM='{0}{1}'".format(self._opus_nam, temp_name)
+                
         if self._opus_pth != '':
             self._opus_cmd += ", PTH='{0}'".format(self._opus_pth)
         self._opus_cmd += "}});"
         self._opus_cmd = self._opus_cmd.format(self._opus_exp, self._opus_xpp)
+        self._log.debug("PreStartOne... {}".format(self._opus_cmd))
 
-        return self._opusds.connectSocket()
+        return True #self._opusds.connect()
 
     def StartOne(self, axis, value=None):
         self._log.debug("StartOne")
@@ -136,6 +151,8 @@ class OPUSSocketCtrl(CounterTimerController):
             return self._opus_pth
         elif name.lower() == "opus_nam":
             return self._opus_nam
+        elif name.lower() == "add_temp2filename":
+            return self._add_temp2filename
 
     def SetAxisExtraPar(self, axis, name, value):
         if name.lower() == "ds":
@@ -150,4 +167,7 @@ class OPUSSocketCtrl(CounterTimerController):
             self._opus_pth = value
         elif name.lower() == "opus_nam":
             self._opus_nam = value
+        elif name.lower() == "add_temp2filename":
+            self._add_temp2filename = value
+
 

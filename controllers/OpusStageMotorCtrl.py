@@ -61,7 +61,7 @@ class OpusStageMotorController(MotorController):
                 #    time.sleep(0.05)
             #pos = float(self._opusds.getLastOpusOutput())
             pos = float(ans)
-        except Exception, e:
+        except Exception as e:
             self._log.debug("Error in ReadOne: %s" % e)
             pos = float('INF')
         return pos

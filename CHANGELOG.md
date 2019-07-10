@@ -5,6 +5,9 @@ This file follows the formats and conventions from [keepachangelog.com]
 
 ## [Unreleased]
 
+### Added
+- Run 2to3 scrip 
+
 ## 1.0.0 2019-07-04
 
 Initial release. Migration from [Sardana 3rd party controllers](https://git.code.sf.net/p/sardana/controllers.git)

@@ -51,19 +51,25 @@ class OpusStageMotorController(MotorController):
 
 
     def ReadOne(self, axis):
+        self._log.debug("In ReadOne axis %d" % axis)
         """Get the motor position"""
         try:
             state = self._opusds.state()
+            while state is not PyTango.DevState.ON:
+                time.sleep(0.1)
+                state = self._opusds.state()
+            self._log.debug("Opus state %s" % str(state))
             if state is PyTango.DevState.ON:
                 cmd = "send_serial_cmd ?pos {0}".format(self.attributes[axis]["axis_name"])
                 ans = self._opusds.runOpusCMDSync(cmd)
                 #while self._opusds.state() is PyTango.DevState.ON:
                 #    time.sleep(0.05)
-            #pos = float(self._opusds.getLastOpusOutput())
-            pos = float(ans)
+                #pos = float(self._opusds.getLastOpusOutput())
+                pos = float(ans)
         except Exception as e:
             self._log.debug("Error in ReadOne: %s" % e)
             pos = float('INF')
+        self._log.debug("Out ReadOne axis %d [%s]" % (axis, str(pos)))
         return pos
 
     def StateOne(self, axis):

@@ -78,12 +78,18 @@ class OPUSSocketCtrl(CounterTimerController):
         self._log.debug("ReadOne... {0}, {1}".format(self._read_peak,
                                                      self._state == State.On))
         value = None
-        if self._read_peak and self._opusds.state() is PyTango.DevState.ON:
-            try:
-                output = self._opusds.getLastOpusOutput()
-                value = float(output)
-            except:
-                self._log.debug("Exception:", exc_info=True)
+        if self._read_peak:
+            now = time.time()
+            while self._opusds.state() is not PyTango.DevState.ON:
+                try:
+                    output = self._opusds.getLastOpusOutput()
+                    value = float(output)
+                except:
+                    self._log.debug("Exception:", exc_info=True)
+                if time.time() - now > 3:
+                    self._log.error("ReadOne Timeout")
+                    break
+        self._log.info("Out ReadOne... {0}".format(value))
         return value
 
     def StateOne(self, ind):

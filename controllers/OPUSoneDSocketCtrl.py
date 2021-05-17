@@ -150,7 +150,7 @@ class OPUSoneDSocketCtrl(OneDController, Referable):
                                                '{0}{1}'.format(self._opus_nam, self._temp_name))
             self._opusds.runOpusCMD(cmd)
             
-    def LoadOne(self, ind, value):
+    def LoadOne(self, ind, value, repetitions, latency):
         pass
 
     def AbortOne(self, ind):

@@ -42,7 +42,7 @@ class OPUSCtrl(CounterTimerController):
         self._log.debug("StartAll")
         self._start_time = time.time()
 
-    def LoadOne(self, ind, value):
+    def LoadOne(self, ind, value, repetitions, latency):
         self._integ_time = value
 
     def AbortOne(self, ind):

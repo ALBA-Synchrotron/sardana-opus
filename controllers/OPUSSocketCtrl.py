@@ -130,7 +130,7 @@ class OPUSSocketCtrl(CounterTimerController):
         self._opus_macro_is_running = True
         self._opusds.runOpusCMD(self._opus_cmd)
 
-    def LoadOne(self, ind, value):
+    def LoadOne(self, ind, value, repetitions, latency):
         pass
 
     def AbortOne(self, ind):

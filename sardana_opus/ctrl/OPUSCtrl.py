@@ -17,8 +17,7 @@ class OPUSCtrl(CounterTimerController):
 
     def __init__(self, inst, props, *args, **kwargs):
         CounterTimerController.__init__(self, inst, props, *args, **kwargs)
-        self._integ_time = None
-        self._start_time = None
+        self._integ_time = self._start_time = time.time()
         self._file = None
 
     def ReadOne(self, axis):

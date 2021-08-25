@@ -21,7 +21,7 @@ class OpusStageMotorController(MotorController):
     axis_attributes = {
         "axis_name": {Type: str,
                       Description: 'Axis name (x, y, or z)',
-                      Access: DataAccess.ReadWrite
+                      #Access: DataAccess.ReadWrite
                       },
     }
 
@@ -79,26 +79,29 @@ class OpusStageMotorController(MotorController):
         if state is PyTango.DevState.ON:
             cmd = "send_serial_cmd ?statusaxis {0}".format(
                 self.attributes[axis]["axis_name"])
-            ans = self._opusds.runOpusCMDSync(cmd)
-            # @ => Axis is not moving and ready
-            # M => Axis is moving
-            # J => Axis is ready and may also be controlled manually (by joystick)
-            # S => Limit switches are actuated and prevent further automatic move
-            # A => ok response after cal instruction
-            # D => ok response after rm instruction
-            # E => error response, move aborted or not executed (e.g. cal or rm error, or stop input active)
-            # T => Timeout occurred (refer to 'caltimeout' instruction)
-            # - => Axis is not enabled, not available in hardware
-            if 'M' in ans:
-                state = State.Moving
-            elif 'E' in ans:
+            try:
+                ans = self._opusds.runOpusCMDSync(cmd)
+                # @ => Axis is not moving and ready
+                # M => Axis is moving
+                # J => Axis is ready and may also be controlled manually (by joystick)
+                # S => Limit switches are actuated and prevent further automatic move
+                # A => ok response after cal instruction
+                # D => ok response after rm instruction
+                # E => error response, move aborted or not executed (e.g. cal or rm error, or stop input active)
+                # T => Timeout occurred (refer to 'caltimeout' instruction)
+                # - => Axis is not enabled, not available in hardware
+                if 'M' in ans:
+                    state = State.Moving
+                elif 'E' in ans:
+                    state = State.Fault
+                elif 'T' in ans:
+                    state = State.Fault
+                elif '-' in ans:
+                    state = State.Fault
+                else:
+                    state = State.On
+            except:
                 state = State.Fault
-            elif 'T' in ans:
-                state = State.Fault
-            elif '-' in ans:
-                state = State.Fault
-            else:
-                state = State.On
         elif state is PyTango.DevState.RUNNING:
             state = State.Moving
         elif state is PyTango.DevState.ALARM:

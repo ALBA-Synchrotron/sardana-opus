@@ -207,7 +207,7 @@ class OPUSoneDSocketCtrl(OneDController, Referable):
             self._opus_cam_intensity = value
             # Change light intensity 
             lintensity = 100 + self._opus_cam_intensity
-            if self._opus_mode == self.VISIBLE
+            if self._opus_mode == self.VISIBLE:
                 cmd = "COMMAND_LINE SendCommand(0,+{{UNI='MOT56={}'}});".format(lintensity)
                 self._opusds.runOpusCMDSync(cmd)
 
